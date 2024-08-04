@@ -1,0 +1,54 @@
+version: '3'
+
+services:
+  traefik:
+    image: traefik:v2.9
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080" # Traefik dashboard
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+  product-service:
+    build: ./product
+    volumes:
+      - ./product:/usr/src/app
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.product-service.rule=Host(`product.localhost`)"
+      - "traefik.http.services.product-service.loadbalancer.server.port=80"
+    depends_on:
+      - traefik
+      - mysql
+
+  website:
+    image: php:apache
+    volumes:
+      - ./website:/var/www/html
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.website.rule=Host(`website.localhost`)"
+      - "traefik.http.services.website.loadbalancer.server.port=80"
+    depends_on:
+      - traefik
+      - product-service
+
+  mysql:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: mydatabase
+      MYSQL_USER: myuser
+      MYSQL_PASSWORD: mypassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  mysql_data:
